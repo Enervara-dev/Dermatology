@@ -179,7 +179,7 @@ def upsert_manual(pc, index, namespace, model, records):
 def main():
     ap = argparse.ArgumentParser(description="Upsert chunks into Pinecone")
     ap.add_argument("--version", default="v1", help="Chunk version under chunks/ (default: v1)")
-    ap.add_argument("--namespace", default="", help="Pinecone namespace (default: the index default)")
+    ap.add_argument("--namespace", default="dermatology", help="Pinecone namespace (default: dermatology)")
     ap.add_argument("--limit", type=int, default=0, help="Only ingest the first N chunks (smoke test)")
     ap.add_argument("--dry-run", action="store_true", help="Build records but make NO Pinecone calls")
     args = ap.parse_args()

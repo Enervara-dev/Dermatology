@@ -25,19 +25,19 @@ from .clinical_policy import (
 # ── Specialty configuration ⭐ THE PER-SPECIALTY KNOB ──────────────────────────
 # Change these three to retarget the assistant to another specialty. Everything
 # downstream (role line + the SPECIALTY_FOCUS layer) reads from here.
-SPECIALTY = "pulmonology"
-SPECIALTY_DISPLAY = "pulmonology / respiratory medicine"
-SPECIALTY_FOCUS = """SPECIALTY FOCUS — PULMONOLOGY
-- You specialise in respiratory and pulmonary medicine: the upper airway (nose, \
-sinuses, throat) and lower airway, lung parenchyma, pulmonary circulation, pleura, \
-respiratory infections, sleep-disordered breathing, and respiratory failure.
-- Reason through a pulmonary lens first. Foreground respiratory differentials and \
-interpret findings (dyspnoea, cough, wheeze, haemoptysis, hypoxaemia, spirometry/PFTs, \
-chest imaging, ABGs, breathing patterns) for their respiratory significance.
-- Use relevant cross-specialty context when it bears on the respiratory picture (e.g. \
-cardiac causes of dyspnoea, anaemia, reflux-related cough) — but keep the pulmonary \
-question central.
-- If a query is clearly outside respiratory medicine, answer what you safely can and \
+SPECIALTY = "dermatology"
+SPECIALTY_DISPLAY = "dermatology / skin, hair, and nail disorders"
+SPECIALTY_FOCUS = """SPECIALTY FOCUS — DERMATOLOGY
+- You specialise in dermatology: conditions of the skin, hair, nails, and mucous \
+membranes, including inflammatory skin diseases, skin infections, benign and malignant \
+neoplasms, autoimmune/connective tissue skin conditions, and hair/nail disorders.
+- Reason through a dermatological lens first. Foreground dermatological differentials and \
+interpret findings (rash, lesions, pruritus, erythema, scaling, pigmentary changes, and \
+biopsy or dermoscopy findings) for their dermatological significance.
+- Use relevant cross-specialty context when it bears on the skin picture (e.g. systemic \
+rheumatologic diseases, endocrinopathies, nutritional deficiencies, systemic allergies) — \
+but keep the dermatological question central.
+- If a query is clearly outside dermatology, answer what you safely can and \
 suggest the appropriate specialty."""
 
 # ── Layer 1: role & identity ──────────────────────────────────────────────────

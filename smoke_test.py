@@ -169,15 +169,15 @@ def test_imports():
 def test_domain():
     R.section("2. Domain layer")
     from graphrag.domain import (
-        PINECONE_NAMESPACE, PULMONOLOGY_RELEVANCE_THRESHOLD,
+        PINECONE_NAMESPACE, DERMATOLOGY_RELEVANCE_THRESHOLD,
         GATEKEEPER_SYSTEM_PROMPT, compose_system_prompt, detect_red_flags,
     )
     from graphrag.domain.clinical_policy import (
         closure_directive, ASSESSMENT_READY_INSTRUCTION, NO_RETRIEVAL_CONCLUDE_INSTRUCTION,
         MAX_DIAGNOSTIC_TURNS,
     )
-    R.check("retrieval namespace = pulmonology_v1", PINECONE_NAMESPACE == "pulmonology_v1", PINECONE_NAMESPACE)
-    R.check("scope threshold = 75", PULMONOLOGY_RELEVANCE_THRESHOLD == 75)
+    R.check("retrieval namespace = dermatology", PINECONE_NAMESPACE == "dermatology", PINECONE_NAMESPACE)
+    R.check("scope threshold = 75", DERMATOLOGY_RELEVANCE_THRESHOLD == 75)
     R.check("max diagnostic turns = 2", MAX_DIAGNOSTIC_TURNS == 2)
     R.check("gatekeeper prompt has relevance rubric + red flags + terminal state",
             all(s in GATEKEEPER_SYSTEM_PROMPT for s in

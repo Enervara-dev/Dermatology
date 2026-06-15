@@ -76,72 +76,105 @@ def closure_directive(
 # Prose, for prompt injection. Mirrors the canonical risk keys in the memory
 # layer (session_memory/domain/risk_rules.py) but is phrased for the LLM.
 HIGH_SIGNAL_SYMPTOMS_TEXT = (
-    "chest pain, coughing up blood (haemoptysis), wheeze, smoking history, signs of "
-    "low oxygen (bluish lips/fingertips, marked breathlessness at rest), severe "
-    "weakness, fast breathing (tachypnea), and persistent or high fever"
+    "rapidly spreading rash, skin blistering or peeling, severe skin pain, fever with a "
+    "rash, signs of skin infection (pus, warmth, spreading redness, swelling), changing or "
+    "bleeding moles, severe or persistent pruritus (itching), and rapid hair or nail loss"
 )
 
-# ── Emergency red flags (respiratory / cardiopulmonary) ───────────────────────
+# ── Emergency red flags (dermatological) ──────────────────────────────────────
 # Prose list for the gatekeeper emergency section.
 RED_FLAGS_TEXT = (
-    "severe shortness of breath or breathlessness at rest; bluish/grey lips, face, "
-    "or fingertips (cyanosis); too breathless to speak in full sentences; new "
-    "confusion or drowsiness; persistent or crushing chest pain; coughing up blood; "
-    "fainting or loss of consciousness (syncope); or signs of dangerously low oxygen"
+    "swelling of the face, lips, tongue, or throat; difficulty breathing or swallowing; "
+    "blistering, peeling, or sloughing of the skin over large areas; skin turning black, "
+    "purple, or necrotic; rapidly spreading redness, warmth, and severe pain; "
+    "or a new skin rash accompanied by high fever, chills, or confusion; "
+    "or melanoma/skin cancer warning signs (a changing, bleeding, or rapidly growing mole; "
+    "asymmetry, irregular borders, multiple colors, diameter greater than 6 mm (size of a pencil eraser), "
+    "or an evolving or ulcerated dark/pigmented lesion)"
 )
 
 # Deterministic backstop — STRONG, present-tense red-flag phrases. The pipeline
 # escalates to the emergency message when any of these match the user's message,
 # even if the LLM gatekeeper missed it. Patterns are intentionally conservative
-# (they require explicit severity) so ordinary complaints like "can't breathe
-# properly" or a past "chest pain last week" do NOT trip them.
+# (they require explicit severity) so ordinary complaints like "dry skin"
+# do NOT trip them.
 RED_FLAG_PATTERNS: dict[str, re.Pattern[str]] = {
-    "severe_breathlessness": re.compile(
-        r"\b(can'?t|cannot|unable to)\s+breathe?\s+at all\b"
-        r"|\bstruggl\w*\s+to\s+breathe?\b"
-        r"|\bgasping\s+(for\s+)?(air|breath)\b"
-        r"|\bfighting\s+(for|to)\s+breathe?\b"
-        r"|\bsuffocat\w*"
-        r"|\bsever(e|ely)\s+(short(ness)?\s+of\s+breath|breathless|difficulty\s+breathing|dyspn\w*)",
+    "anaphylaxis_angioedema": re.compile(
+        r"\b(anaphylaxis|anaphylactic|angioedema)\b"
+        r"|\bswell\w*\s+(of\s+)?(my\s+)?(face|lips?|tongue|throat)\b"
+        r"|\bswollen\s+(face|lips?|tongue|throat)\b"
+        r"|\b(difficulty|unable\s+to)\s+(swallow\w*|breathe?\w*)\b",
         re.IGNORECASE,
     ),
-    "cyanosis": re.compile(
-        r"\b(blue|bluish|grey|gray|purple)\s+(lips?|fingers?|fingertips?|face|skin|nails?)\b"
-        r"|\blips?\s+(are\s+)?(turning\s+)?(blue|bluish|grey|gray|purple)\b",
+    "skin_peeling_sloughing": re.compile(
+        r"\bskin\s+(peeling\s+off|peeling\s+in\s+sheets|sloughing\s+off|shedding)\b"
+        r"|\bskin\s+is\s+coming\s+off\b"
+        r"|\b(blistering|blisters)\s+(over\s+large\s+areas|all\s+over\s+body|widespread)\b"
+        r"|\b(stevens[- ]johnson|sjs|toxic\s+epidermal\s+necrolysis|ten)\b",
         re.IGNORECASE,
     ),
-    "cannot_speak_full_sentences": re.compile(
-        r"\b(can'?t|cannot|too\s+breathless\s+to)\s+(speak|talk|finish)\b.*\b(sentence|sentences|words)\b"
-        r"|\bonly\s+(say|speak)\s+(a\s+)?few\s+words\b"
-        r"|\bcan'?t\s+(complete|finish)\s+(a\s+)?sentence",
+    "necrotic_skin": re.compile(
+        r"\bskin\s+(turning\s+black|is\s+black|necrotic|dying|dead)\b"
+        r"|\bblack\s+(lesion|spot|patch|skin)\s+(turning\s+black|necrotic)\b"
+        r"|\bgangrene\b",
         re.IGNORECASE,
     ),
-    "confusion": re.compile(
-        r"\b(confused|confusion|disorient\w+|not\s+making\s+sense|very\s+drowsy|hard\s+to\s+wake)\b",
+    "severe_spreading_infection": re.compile(
+        r"\b(necrotizing\s+fasciitis|flesh[- ]eating|cellulitis)\b"
+        r"|\b(rapidly\s+spreading|spreading\s+fast)\s+(redness|warmth|swelling|rash)\b"
+        r"|\bsevere\s+(skin\s+)?pain\s+and\s+(redness|warmth|swelling)\b",
         re.IGNORECASE,
     ),
-    "persistent_chest_pain": re.compile(
-        r"\b(persistent|constant|severe|crushing|tight)\b.{0,20}\bchest\s+pain\b"
-        r"|\bchest\s+pain\b.{0,30}\b(won'?t|doesn'?t|wont)\s+(go\s+away|stop|ease)\b"
-        r"|\bchest\s+pain\b.{0,20}\bfor\s+(hours|the\s+last\s+hour)\b"
-        r"|\bcrushing\b.{0,15}\bchest\b",
+    "systemic_rash_fever": re.compile(
+        r"\b(rash|hives|spots?)\b.*\b(high\s+fever|chills|confusion|drowsy|drowsiness)\b"
+        r"|\b(high\s+fever|chills|confusion|drowsy|drowsiness)\b.*\b(rash|hives|spots?)\b",
         re.IGNORECASE,
     ),
-    "haemoptysis": re.compile(
-        r"\bcough(ing)?\s+up\s+blood\b"
-        r"|\bblood\s+(in|when|while)\b.{0,20}\b(cough|sputum|phlegm|mucus)\b"
-        r"|\b(haemoptysis|hemoptysis)\b"
-        r"|\bspitting\s+blood\b",
+    "changing_mole": re.compile(
+        r"\b(mole|spot|lesion|freckle)s?\b.*\b(chang(e|es|ed|ing)|evolv(e|es|ed|ing))\b"
+        r"|\b(chang(e|es|ed|ing)|evolv(e|es|ed|ing))\b.*\b(mole|spot|lesion|freckle)s?\b",
         re.IGNORECASE,
     ),
-    "syncope": re.compile(
-        r"\b(faint(ed|ing)?|passed\s+out|black(ed)?\s+out|collaps(e|ed|ing)|lost\s+consciousness)\b",
+    "bleeding_mole": re.compile(
+        r"\b(mole|spot|lesion|freckle)s?\b.*\b(bleed(s|ing)?|bled|ooz(e|es|ing)|weep(s|ing)?)\b"
+        r"|\b(bleed(s|ing)?|bled|ooz(e|es|ing)|weep(s|ing)?)\b.*\b(mole|spot|lesion|freckle)s?\b",
         re.IGNORECASE,
     ),
-    "oxygen_distress": re.compile(
-        r"\boxygen\b.{0,15}\b(low|drop|dropping|falling|below)\b"
-        r"|\b(o2|spo2|sats?|saturation)\b.{0,12}\b(low|drop\w*|falling|\d{1,2}\s*%)\b"
-        r"|\blow\s+oxygen\b",
+    "rapidly_growing_mole": re.compile(
+        r"\b(mole|spot|lesion|freckle)s?\b.*\b(rapid(ly)?|fast|quick(ly)?)\b.*\b(grow(s|th|ing)?|enlarg(e|es|ed|ing)|spread(s|ing)?)\b"
+        r"|\b(rapid(ly)?|fast|quick(ly)?)\b.*\b(grow(s|th|ing)?|enlarg(e|es|ed|ing)|spread(s|ing)?)\b.*\b(mole|spot|lesion|freckle)s?\b",
+        re.IGNORECASE,
+    ),
+    "asymmetrical_mole": re.compile(
+        r"\b(mole|spot|lesion|freckle)s?\b.*\b(asymmetric(al|y)?|not\s+symmetric(al)?|lopsided)\b"
+        r"|\b(asymmetric(al|y)?|not\s+symmetric(al)?|lopsided)\b.*\b(mole|spot|lesion|freckle)s?\b",
+        re.IGNORECASE,
+    ),
+    "irregular_borders": re.compile(
+        r"\b(irregular|jagged|blurred|notched|scalloped|uneven)\b.*\b(border|edge|margin)s?\b",
+        re.IGNORECASE,
+    ),
+    "multiple_colors": re.compile(
+        r"\b(mole|spot|lesion|freckle)s?\b.*\b(multi\w*[- ]color\w*|different\s+color\w*|color\s+variation|shades?\s+of)\b"
+        r"|\b(multi\w*[- ]color\w*|different\s+color\w*|color\s+variation|shades?\s+of)\b.*\b(mole|spot|lesion|freckle)s?\b",
+        re.IGNORECASE,
+    ),
+    "new_dark_lesion": re.compile(
+        r"\bnew\b.*\b(dark|black|brown)\b.*\b(lesion|spot|mole|freckle|mark|growth)s?\b",
+        re.IGNORECASE,
+    ),
+    "evolving_pigmented_lesion": re.compile(
+        r"\b(pigment(ed)?|dark(er)?|colored)\b.*\b(lesion|spot|mole|freckle)s?\b.*\b(evolv(e|es|ed|ing)|chang(e|es|ed|ing))\b"
+        r"|\b(evolv(e|es|ed|ing)|chang(e|es|ed|ing))\b.*\b(pigment(ed)?|dark(er)?|colored)\b.*\b(lesion|spot|mole|freckle)s?\b",
+        re.IGNORECASE,
+    ),
+    "ulcerated_pigmented_lesion": re.compile(
+        r"\b(ulcerat(e|ed|ing)?|open\s+sore|non[- ]healing)\b.*\b(pigment(ed)?|dark(er)?|colored|mole|spot)\b.*\b(lesion|spot|mole)s?\b",
+        re.IGNORECASE,
+    ),
+    "diameter_greater_than_6mm": re.compile(
+        r"\b(diameter|size|width|wider|larger)\b.*\b(6\s*mm|6\s*millimeter|six\s*mm|pencil\s+eraser)\b"
+        r"|\b(6\s*mm|6\s*millimeter|six\s*mm|pencil\s+eraser)\b.*\b(diameter|size|width)\b",
         re.IGNORECASE,
     ),
 }
@@ -179,7 +212,7 @@ QUESTIONING_POLICY = f"""TRIAGE QUESTIONING
 - Actively ask the clinically important triage questions when symptoms are ambiguous \
 or potentially serious — do not default to "no questions". Good triage questions probe \
 onset/duration, progression, severity, triggers/relievers, associated red-flag symptoms, \
-and relevant history (e.g. smoking, known lung disease).
+and relevant history (e.g. skin cancer history, allergies, topical treatments used).
 - Ask only what changes management. Ask at most {MAX_FOLLOWUP_QUESTIONS} questions, \
 fewest possible, the most decision-relevant first. If you already have enough to answer \
 safely, don't ask."""

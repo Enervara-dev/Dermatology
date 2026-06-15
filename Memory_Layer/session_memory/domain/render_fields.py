@@ -2,7 +2,8 @@
 session_memory.domain.render_fields
 ──────────────────────────────────────
 How the StructuredState clinical fields are LABELLED when rendered into prompt
-text. Shared by the three renderers so labels live in one place:
+text for the dermatology assistant. Shared by the three renderers so labels
+live in one place:
 
   - context_builder._state_lines          → STATE_RENDER_FIELDS
   - retriever.format_working_memory        → STATE_RENDER_FIELDS

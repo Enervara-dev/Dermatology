@@ -48,7 +48,7 @@ QUERY_TUNING: dict[str, dict] = {
         reranker_top_k        = 5,
         graph_hops            = 1,
         graph_enabled         = True,
-        priority_entity_types = ["disease", "symptom", "syndrome"],
+        priority_entity_types = ["disease", "symptom", "lesion_morphology", "lesion_distribution", "clinical_finding", "medical_system"],
         goal                  = "cause identification",
     ),
     "drug_interaction": dict(
@@ -65,7 +65,7 @@ QUERY_TUNING: dict[str, dict] = {
         reranker_top_k        = 5,
         graph_hops            = 1,
         graph_enabled         = False,   # summary-driven, graph less important
-        priority_entity_types = ["disease", "syndrome", "condition", "disorder"],
+        priority_entity_types = ["disease", "lesion_morphology", "clinical_finding", "lab_finding", "historical_text", "historical_person"],
         goal                  = "clear explanation / definition",
     ),
     "guideline": dict(
@@ -73,7 +73,7 @@ QUERY_TUNING: dict[str, dict] = {
         reranker_top_k        = 7,       # keep more for structured protocols
         graph_hops            = 1,
         graph_enabled         = True,
-        priority_entity_types = ["procedure", "drug", "treatment", "protocol", "therapy"],
+        priority_entity_types = ["procedure", "drug", "treatment", "protocol", "therapy", "medical_system"],
         goal                  = "structured clinical protocol",
     ),
     "lab_interpretation": dict(
@@ -81,7 +81,7 @@ QUERY_TUNING: dict[str, dict] = {
         reranker_top_k        = 5,
         graph_hops            = 1,
         graph_enabled         = True,
-        priority_entity_types = ["test", "lab_value", "biomarker", "threshold"],
+        priority_entity_types = ["test", "lab_value", "biomarker", "threshold", "lab_finding"],
         goal                  = "lab result interpretation",
     ),
     "prognosis": dict(

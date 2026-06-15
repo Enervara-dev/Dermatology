@@ -16,4 +16,11 @@ DRUG_NAME_PATTERN: str = r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b"
 DRUG_NAME_STOPWORDS: set[str] = {
     "What", "When", "Where", "How", "Why", "Can", "Does", "The",
     "This", "That", "Drug", "Medication", "Medicine", "Patient",
+    # Dermatology conditions and terms to avoid false-positive drug-name detection
+    "Eczema", "Psoriasis", "Acne", "Melanoma", "Rosacea", "Dermatitis",
+    "Shingles", "Lichen", "Planus", "Vitiligo", "Urticaria", "Cellulitis",
+    "Impetigo", "Keratosis", "Carcinoma", "Sarcoma", "Cyst", "Wart", "Mole",
+    "Rash", "Lesion", "Plaque", "Patch", "Macule", "Papule", "Nodule",
+    "Vesicle", "Bulla", "Pustule", "Pruritus", "Itch", "Dry", "Skin", "Hair",
+    "Nail", "Dermatology", "Dermatologist",
 }

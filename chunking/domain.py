@@ -17,10 +17,12 @@ import re
 # state is NOT a symptom. Anything emitted outside this set is mapped via
 # ENTITY_TYPE_SYNONYMS, else coerced to ENTITY_TYPE_FALLBACK.
 ENTITY_TYPES = [
-    "disease", "syndrome", "symptom", "clinical_finding", "lab_finding",
-    "metabolic_state", "physiological_state", "biomarker", "risk_factor",
-    "anatomical_entity", "drug", "drug_class", "procedure", "test", "intervention",
-    "mechanism", "pathogen", "gene", "protein", "clinical_process",
+    "disease", "syndrome", "symptom", "lesion_morphology", "lesion_distribution",
+    "clinical_finding", "lab_finding", "metabolic_state", "physiological_state",
+    "biomarker", "risk_factor", "anatomical_entity", "drug", "drug_class",
+    "procedure", "test", "intervention", "mechanism", "pathogen", "gene",
+    "protein", "clinical_process", "historical_person", "historical_text",
+    "medical_system", "location",
 ]
 ENTITY_TYPE_SET = set(ENTITY_TYPES)
 
@@ -38,6 +40,55 @@ ENTITY_TYPE_SYNONYMS = {
     "bacteria": "pathogen", "virus": "pathogen", "organism": "pathogen",
     "anatomical_structure": "anatomical_entity", "organ": "anatomical_entity",
     "drug_category": "drug_class", "medication_class": "drug_class",
+    # ── Dermatology-specific synonyms ──
+    "lesion": "clinical_finding", "rash": "clinical_finding", "eruption": "clinical_finding",
+    "macule": "lesion_morphology", "papule": "lesion_morphology", "plaque": "lesion_morphology",
+    "vesicle": "lesion_morphology", "nodule": "lesion_morphology", "pustule": "lesion_morphology",
+    "scale": "lesion_morphology", "crust": "lesion_morphology", "patch": "lesion_morphology",
+    "wheal": "lesion_morphology", "bullae": "lesion_morphology", "erosion": "lesion_morphology",
+    "ulcer": "lesion_morphology", "fissure": "lesion_morphology", "telangiectasia": "lesion_morphology",
+    "lichenification": "lesion_morphology", "atrophy": "lesion_morphology", "erythema": "clinical_finding",
+    "itch": "symptom", "itching": "symptom", "pruritus": "symptom", "burning": "symptom",
+    "stinging": "symptom", "pain": "symptom", "tenderness": "symptom",
+    "corticosteroid": "drug_class", "topical_steroid": "drug_class", "hydrocortisone": "drug",
+    "clobetasol": "drug", "triamcinolone": "drug", "retinoid": "drug_class", "tretinoin": "drug",
+    "adapalene": "drug", "calcineurin_inhibitor": "drug_class", "tacrolimus": "drug",
+    "pimecrolimus": "drug", "antifungal": "drug_class", "ketoconazole": "drug",
+    "clotrimazole": "drug", "terbinafine": "drug", "mupirocin": "drug", "dupilumab": "drug",
+    "methotrexate": "drug", "cyclosporine": "drug", "biologic": "drug_class",
+    "biopsy": "procedure", "skin_biopsy": "procedure", "shave_biopsy": "procedure",
+    "punch_biopsy": "procedure", "excision": "procedure", "cryotherapy": "procedure",
+    "curettage": "procedure", "phototherapy": "intervention",
+    "dermoscopy": "test", "wood_lamp": "test", "koh_prep": "test", "patch_test": "test",
+    "dermatophyte": "pathogen", "fungus": "pathogen", "yeast": "pathogen", "scabies": "pathogen",
+    "candida": "pathogen", "malassezia": "pathogen", "herpes": "pathogen", "hsv": "pathogen",
+    "hpv": "pathogen", "varicella": "pathogen", "shingles": "pathogen",
+    "skin": "anatomical_entity", "epidermis": "anatomical_entity", "dermis": "anatomical_entity",
+    "scalp": "anatomical_entity", "nail": "anatomical_entity", "mucosa": "anatomical_entity",
+    "hair": "anatomical_entity", "follicle": "anatomical_entity",
+    "annular": "lesion_distribution", "linear": "lesion_distribution",
+    "dermatomal": "lesion_distribution", "flexural": "lesion_distribution",
+    "symmetric": "lesion_distribution", "acral": "lesion_distribution",
+    "intertriginous": "lesion_distribution",
+    # ── Traditional/Historical synonyms ──
+    "kustha": "disease", "kushtha": "disease",
+    "vata": "metabolic_state", "pitta": "metabolic_state", "kapha": "metabolic_state",
+    "dosha": "metabolic_state", "rasayana": "intervention",
+    "sushruta": "historical_person", "charaka": "historical_person", "vagbhata": "historical_person",
+    "robert_willan": "historical_person", "willan": "historical_person",
+    "ayurveda": "medical_system", "siddha": "medical_system",
+    "unani": "medical_system", "tibb": "medical_system",
+    "india": "location", "baluchistan": "location", "mehrgarh": "location", "balathal": "location", "rajasthan": "location",
+    "charaka_samhita": "historical_text", "sushruta_samhita": "historical_text",
+    "vagbhata_samhita": "historical_text", "atreya_samhita": "historical_text",
+    "agnivesha_samhita": "historical_text", "vinaya_pitaka": "historical_text",
+    # ── Subspecialties and medical systems synonyms ──
+    "pediatric_dermatology": "clinical_process", "dermatopathology": "clinical_process",
+    "trichology": "clinical_process", "venereology": "clinical_process",
+    "leprology": "clinical_process", "dermatosurgery": "clinical_process",
+    "cosmetic_dermatology": "clinical_process",
+    "western_medicine": "clinical_process", "western_modern_medicine": "clinical_process",
+    "modern_medicine": "clinical_process",
 }
 ENTITY_TYPE_FALLBACK = "clinical_finding"
 
@@ -61,128 +112,99 @@ RELATION_QUALIFIER_KEYS = ["onset", "temporality", "severity", "certainty", "con
 ONSET_VALUES = ["instantaneous", "acute", "subacute", "chronic"]
 
 # ── 3. Specialty taxonomy ─────────────────────────────────────────────────────
-# Chunks are tagged with EVERY specialty their CONTENT is relevant to (not the
-# source book), so cross-specialty data (an MI in a respiratory text) stays visible
-# to the cardiology agent. ⚠️ EDIT this to match your 15 specialties exactly.
+# Only dermatology is included.
 SPECIALTIES = [
-    "pulmonology", "cardiology", "nephrology", "endocrinology", "gastroenterology",
-    "hepatology", "neurology", "hematology", "oncology", "rheumatology",
-    "infectious_disease", "immunology", "dermatology", "emergency_medicine", "general_medicine",
+    "dermatology",
 ]
 SPECIALTY_SET = set(SPECIALTIES)
 
 # Variants the model emits → canonical specialty.
 SPECIALTY_SYNONYMS = {
-    "respiratory": "pulmonology", "respiratory_medicine": "pulmonology", "pulmonary": "pulmonology",
-    "renal": "nephrology", "cardiovascular": "cardiology", "cardiac": "cardiology",
-    "haematology": "hematology", "gi": "gastroenterology", "liver": "hepatology",
-    "infectious_diseases": "infectious_disease", "endocrine": "endocrinology",
-    "neuro": "neurology", "derm": "dermatology", "emergency": "emergency_medicine",
-    "er": "emergency_medicine", "ed": "emergency_medicine",
-    "internal_medicine": "general_medicine", "general": "general_medicine",
+    "derm": "dermatology", "skin_medicine": "dermatology",
+    "cutaneous": "dermatology",
 }
 
 # ── 4. Segmentation patterns ──────────────────────────────────────────────────
 SECTION_HEADER_PATTERN = re.compile(
-    r'^(Symptoms|Diagnosis|Treatment|Introduction|Pathophysiology)\s*$',
+    r'^(Symptoms|Diagnosis|Treatment|Introduction|Pathophysiology|Morphology|Differential Diagnosis|Management|Prevention)\s*$',
     re.IGNORECASE,
 )
 CONCEPT_HEADER_PATTERN = re.compile(
-    r'^(treatment|diagnosis|pathophysiology|etiology|clinical features|management|'
-    r'epidemiology|prognosis|pathogenesis|history|physical examination|complications|'
-    r'prevention|indications|contraindications)\b',
+    r'^(treatment|diagnosis|pathophysiology|etiology|clinical presentation|clinical features|'
+    r'management|epidemiology|prognosis|pathogenesis|history|physical examination|'
+    r'morphology|histopathology|differential diagnosis|complications|prevention|'
+    r'indications|contraindications|ayurveda|siddha|traditional medicine|historical outline)\b',
     re.IGNORECASE,
 )
 
 # ── 5. Chunk validation thresholds ────────────────────────────────────────────
 MIN_ENTITIES = 3
-MAX_CHUNK_TOKENS = 650
+MAX_CHUNK_TOKENS = 500
 
 # ── 6. Extraction prompt ──────────────────────────────────────────────────────
 EXTRACTOR_ROLE = "clinical knowledge extraction engine"
 SOURCE_DESCRIPTION = "medical reference text"
 KNOWLEDGE_NOUN = "clinical knowledge"
-CONCEPT_EXAMPLES = "a disease, a drug/drug class, a diagnostic approach, a mechanism, a management strategy"
-TOPIC_EXAMPLE = "Diagnosis of pulmonary embolism"
+CONCEPT_EXAMPLES = "a skin disease, a topical or systemic drug/drug class, a diagnostic approach (e.g. dermoscopy, biopsy), a pathophysiology mechanism, a lesion morphology, or a management strategy"
+TOPIC_EXAMPLE = "Diagnosis of plaque psoriasis"
 PROSE_NOUN = "clinical prose"
 EXPERT_NOUN = "a clinician"
-SKIP_EXAMPLES = '"rest", "exertion", "swimming", "history", "body position"'
-TARGET_ENTITIES_HINT = "~8–15"
+SKIP_EXAMPLES = '"skin", "patient", "water", "body site", "history", "age", "period", "century", "era", "dermatology", "dermatologist", "skin disease", "skin diseases", "medicine", "beauty", "identity", "culture", "science", "social custom", "environment"'
+TARGET_ENTITIES_HINT = "~4–8"
 
 _ENTITY_TYPES_STR = ", ".join(ENTITY_TYPES)
 _RELATION_TYPES_STR = ", ".join(RELATION_TYPES)
 _SPECIALTIES_STR = ", ".join(SPECIALTIES)
 
-RELATION_GUIDANCE = """    • disease/syndrome  manifests_as        symptom
-    • risk_factor       increases_risk_of   disease        (or predisposes_to)
-    • cause             causes / leads_to    effect
-    • drug/intervention treats / used_for    disease/symptom (or alleviates/indicated_for)
-    • disease           diagnosed_by         test/procedure
-    • test/procedure    assesses / detects   disease/biomarker
-    • drug              contraindicated_with drug/condition"""
+RELATION_GUIDANCE = """    • disease  manifests_as  symptom/lesion (e.g., eczema manifests_as vesicle)
+    • risk_factor  increases_risk_of  disease (e.g., UV increases_risk_of melanoma)
+    • drug  treats  disease/symptom (e.g., steroid treats eczema)
+    • disease  diagnosed_by  test/procedure (e.g., melanoma diagnosed_by skin_biopsy)"""
 
-SYSTEM_PROMPT = f"""You are a {EXTRACTOR_ROLE} for a graph-based reasoning system. You
-convert {SOURCE_DESCRIPTION} into STRICT JSON chunks that are HIGH-LEVEL,
-self-contained units of {KNOWLEDGE_NOUN}, fit for BOTH a Neo4j knowledge graph and
-a vector database.
+SYSTEM_PROMPT = f"""You are a {EXTRACTOR_ROLE} that converts {SOURCE_DESCRIPTION} into strict JSON chunks of {KNOWLEDGE_NOUN}.
 
-OUTPUT FORMAT
-- Valid JSON only. No markdown, no commentary. Follow the provided schema exactly.
+OUTPUT FORMAT:
+- Valid JSON only. No markdown, no comments. Follow the provided schema exactly.
 
-WHAT A GOOD CHUNK IS (HIGH-LEVEL)
-- Each chunk captures ONE coherent concept ({CONCEPT_EXAMPLES}).
-- If the input covers several concepts, SPLIT into multiple chunks — one per concept.
-- ~150–350 tokens of `text`; never merge unrelated material; never exceed ~600 tokens.
-- source.topic = a SPECIFIC human-readable title (e.g. "{TOPIC_EXAMPLE}"), not "General".
+WHAT A GOOD CHUNK IS:
+- Captures ONE concept ({CONCEPT_EXAMPLES}). Split if multiple.
+- ~150–350 tokens of clean text. No OCR/bullet noise.
+- source.topic: specific concept title (e.g., "{TOPIC_EXAMPLE}").
 
-SPECIALTIES (cross-specialty visibility — derive from CONTENT, not the source book)
-- Tag `specialties` with EVERY specialty the chunk's entities are clinically relevant
-  to, choosing from: {_SPECIALTIES_STR}.
-- Judge from the entities themselves: a chunk mentioning myocardial infarction →
-  include "cardiology"; metabolic acidosis → "nephrology"; thyrotoxicosis →
-  "endocrinology" — EVEN IF the source is a respiratory text. Multiple is normal.
+SPECIALTIES:
+- Tag `specialties` using only: {_SPECIALTIES_STR}.
 
-TEXT QUALITY (the `text` field)
-- Clean, readable {PROSE_NOUN} faithful to the source. Remove OCR noise (bullets,
-  private-use glyphs, headers/footers, figure/table labels). Repair obvious OCR
-  breakage ("<1 min" not "<min"). Do not invent facts.
+ENTITIES (Extract {TARGET_ENTITIES_HINT} most salient; skip generic words like {SKIP_EXAMPLES}):
+- CRITICAL: DO NOT extract generic disease categories (e.g., "skin disease", "skin diseases", "dermatological disease", "dermatological disorders") or generic root concepts (e.g., "dermatology", "dermatologist", "medicine") unless they are the primary topic.
+- CRITICAL: Every single entity in this list MUST participate in at least one relation (as source or target). If an entity cannot be connected to any other, do not extract it.
+- REDUCE OVER-EXTRACTION: For historical content, prefer extracting only 4–8 highly informative entities (avoid extracting every noun).
+- HISTORICAL GUIDANCE: When historical medical literature is discussed, prefer extracting medical systems, historical texts, historical persons, and disease classifications. Avoid extracting cultural concepts, philosophical ideas, or generic societal descriptions.
+- `name`: canonical lowercase singular name (expand abbreviations: "AD" -> "atopic dermatitis", "BCC" -> "basal cell carcinoma"). Use the same canonical name every time.
+- `aliases`: list of synonyms.
+- `type`: choose from: {_ENTITY_TYPES_STR}. Precise typing:
+    • named condition -> disease (e.g. psoriasis)
+    • complaint -> symptom (e.g. pruritus)
+    • lesion feature -> lesion_morphology (e.g. plaque, vesicle)
+    • spatial pattern -> lesion_distribution (e.g. linear)
+    • exam sign -> clinical_finding
+    • lab/biopsy result -> lab_finding
+    • traditional medicine systems -> medical_system (e.g. ayurveda, siddha, unani)
+    • historical books/compendia/scriptures -> historical_text (e.g. charaka samhita, sushruta samhita)
+    • historical figures/persons -> historical_person (e.g. robert willan, charaka, sushruta)
+    • geographical places/countries -> location (e.g. india, baluchistan)
 
-ENTITIES (salient, canonical, precisely typed)
-- Extract the {TARGET_ENTITIES_HINT} most salient entities {EXPERT_NOUN} would key on.
-  SKIP generic/trivial terms (e.g. {SKIP_EXAMPLES}). 10 strong entities beat 40 noisy ones.
-- Per entity emit THREE fields — `name`, `type`, `aliases`:
-    • `name` = the CANONICAL preferred term: expand abbreviations ("COPD" →
-      "chronic obstructive pulmonary disease"), drop parentheticals, lowercase, singular.
-      Use the SAME canonical name every time it recurs (the system derives one graph id from it).
-    • `aliases` = the common synonyms/abbreviations for that entity, e.g. for myocardial
-      infarction: ["MI","STEMI","NSTEMI","heart attack"]. [] if none. This is how
-      synonyms collapse to one node — do NOT skip it.
-    • `type` = the MOST SPECIFIC fit from: {_ENTITY_TYPES_STR}.
-      TYPE PRECISELY — this drives graph traversal:
-        - a named disease/condition → disease
-        - a patient-reported complaint → symptom; an examination sign → clinical_finding
-        - a lab/test result (e.g. anaemia, hyperkalaemia, raised D-dimer) → lab_finding
-        - an acid–base/metabolic disturbance (e.g. metabolic acidosis) → metabolic_state
-        - a physiological state (e.g. hypoxaemia, hypotension) → physiological_state
-      Do NOT label findings, lab values, or metabolic states as "disease".
-- Do NOT emit codes — the system assigns standard terminology codes downstream.
-
-RELATIONS (precise, directional, REFERENTIALLY CLEAN, with clinical qualifiers)
-- `source`/`target` MUST each be the EXACT canonical `name` of an entity in this chunk
-  (relations to non-listed entities are DROPPED — add the entity or omit the relation).
-- Choose `type` from: {_RELATION_TYPES_STR}. Use the SPECIFIC, directional relation:
+RELATIONS (Source and target must match entity names in this chunk - EVERY single entity must be connected):
+- `type`: choose from: {_RELATION_TYPES_STR}. Use the specific directional relation:
 {RELATION_GUIDANCE}
-- `qualifiers` — CAPTURE the clinical axis when the text encodes it; never flatten it away:
-    • onset (one of: {", ".join(ONSET_VALUES)}) — e.g. a cause listed under "instantaneous
-      onset" → "qualifiers": {{"onset": "instantaneous"}}.
-    • optionally severity / temporality / context. Omit `qualifiers` ({{}}) only when none apply.
-- Use `{RELATION_TYPE_FALLBACK}` ONLY when no specific relation fits.
+- ALL ENTITIES MUST BE CONNECTED (CRITICAL): Every single entity in the 'entities' list MUST participate in at least one relation (as source or target). If there is no causal/clinical relation, connect it using the fallback "associated_with" (e.g., connect an 'historical_text' like 'charaka samhita' to its 'medical_system' like 'ayurveda'). Zero unconnected entities allowed.
+- `qualifiers`: onset (one of: {", ".join(ONSET_VALUES)}). E.g. {{"onset": "acute"}}.
 
-SUMMARY FIELDS (embedded into a vector DB — tight but meaningful)
-- `summary`: 1–2 sentences of the key facts. `clinical_significance`: 1 sentence on why it matters.
+SUMMARY FIELDS:
+- `summary`: 1–2 key sentences. `clinical_significance`: 1 sentence.
 
-SELF-CHECK
-- Entities canonical + precisely typed (no finding/lab/metabolic mislabeled as disease)?
-- Relations id-resolvable, directional, with onset/qualifiers preserved?
-- specialties cover every relevant field from the content? JSON strictly valid?
+SELF-CHECK:
+- Entities canonical and precisely typed?
+- CRITICAL: Is every single entity connected to at least one relation in the list? If any entity is unconnected, either add an "associated_with" relation linking it, or remove the entity from the 'entities' list!
+- Relations id-resolvable, directional, and onset/qualifiers preserved?
+- specialties cover every relevant field? JSON strictly valid?
 """

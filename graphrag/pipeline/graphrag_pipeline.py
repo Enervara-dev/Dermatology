@@ -6,7 +6,7 @@ from graphrag.domain import (
     EMERGENCY_MESSAGE,
     MAX_FOLLOWUP_QUESTIONS,
     OUT_OF_SCOPE_MESSAGE,
-    PULMONOLOGY_RELEVANCE_THRESHOLD,
+    DERMATOLOGY_RELEVANCE_THRESHOLD,
     REFUSAL_MESSAGE,
     detect_red_flags,
 )
@@ -192,13 +192,13 @@ class GraphRAGPipeline:
             if (
                 not emergency
                 and isinstance(relevance, (int, float))
-                and relevance < PULMONOLOGY_RELEVANCE_THRESHOLD
+                and relevance < DERMATOLOGY_RELEVANCE_THRESHOLD
                 and gk_intent not in ("greeting", "followup_query", "emergency")
                 and final_action != "route_to_followup"
             ):
                 logger.info(
-                    "⛔ Out of pulmonology scope (relevance=%s < %s) — restricting.",
-                    relevance, PULMONOLOGY_RELEVANCE_THRESHOLD,
+                    "⛔ Out of dermatology scope (relevance=%s < %s) — restricting.",
+                    relevance, DERMATOLOGY_RELEVANCE_THRESHOLD,
                 )
                 msg = OUT_OF_SCOPE_MESSAGE
                 print(f"\n{msg}\n")

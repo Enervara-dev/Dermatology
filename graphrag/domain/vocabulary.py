@@ -18,14 +18,15 @@ GRAPH_NODE_LABEL: str = "Entity"
 
 # Pinecone namespace the retriever queries. Vector retrieval is RESTRICTED to
 # this namespace — the data must be ingested into it
-# (e.g. `python ingest_pinecone.py --namespace pulmonology_v1`). Change this when
+# (e.g. `python ingest_pinecone.py --namespace dermatology`). Change this when
 # retargeting to another specialty's index slice.
-PINECONE_NAMESPACE: str = "pulmonology_v1"
+PINECONE_NAMESPACE: str = "dermatology"
 
-# Minimum pulmonology-relevance score (0–100, produced by the gatekeeper) a
+# Minimum dermatology-relevance score (0–100, produced by the gatekeeper) a
 # non-greeting / non-follow-up query must reach to be answered. Below this the
 # pipeline restricts the query as out-of-specialty.
-PULMONOLOGY_RELEVANCE_THRESHOLD: int = 75
+
+DERMATOLOGY_RELEVANCE_THRESHOLD: int = 75
 
 # Default human-readable answer goal when no per-type goal is supplied.
 DEFAULT_ANSWER_GOAL: str = "provide a medical answer"

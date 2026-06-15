@@ -13,12 +13,12 @@ REFUSAL_MESSAGE: str = (
     "Please ask a medical question."
 )
 
-# Returned when a query is medical but falls below the pulmonology relevance
+# Returned when a query is medical but falls below the dermatology relevance
 # threshold (see vocabulary.PULMONOLOGY_RELEVANCE_THRESHOLD).
 OUT_OF_SCOPE_MESSAGE: str = (
-    "🫁 I'm focused on pulmonology and respiratory medicine, so I can't help "
-    "with that one. Please ask about a lung or breathing-related concern "
-    "(e.g. cough, breathlessness, asthma, COPD, chest infections)."
+    "🩹 I'm focused on dermatology and skin, hair, and nail disorders, so I can't help "
+    "with that one. Please ask about a skin, hair, or nail-related concern "
+    "(e.g. rash, acne, eczema, psoriasis, atypical moles, or skin infections)."
 )
 
 # Returned when the gatekeeper detects an emergency red-flag.
