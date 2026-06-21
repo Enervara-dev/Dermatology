@@ -169,16 +169,19 @@ class GraphRAGPipeline:
 
             final_action = analysis.get("final_action")
             if final_action == "refuse" and not emergency:
-                msg = REFUSAL_MESSAGE
-                print(f"\n{msg}\n")
+                from graphrag.domain.messages import refusal_blocks
+                blocks = refusal_blocks()
+                for b in blocks:
+                    yield b
+                ndjson_str = "\n".join(json.dumps(b) for b in blocks)
                 self.memory_adapter.update_after_interaction(
                     session=session,
                     user_query=original_query_text,
-                    assistant_answer=msg,
+                    assistant_answer=ndjson_str,
                     analysis=analysis,
                     query_type="unknown",
                 )
-                return msg
+                return
             elif final_action == "emergency_redirect":
                 logger.info("🚨 Gatekeeper flagged emergency — escalating to emergency response.")
                 emergency = True
@@ -200,16 +203,19 @@ class GraphRAGPipeline:
                     "⛔ Out of dermatology scope (relevance=%s < %s) — restricting.",
                     relevance, DERMATOLOGY_RELEVANCE_THRESHOLD,
                 )
-                msg = OUT_OF_SCOPE_MESSAGE
-                print(f"\n{msg}\n")
+                from graphrag.domain.messages import out_of_scope_blocks
+                blocks = out_of_scope_blocks()
+                for b in blocks:
+                    yield b
+                ndjson_str = "\n".join(json.dumps(b) for b in blocks)
                 self.memory_adapter.update_after_interaction(
                     session=session,
                     user_query=original_query_text,
-                    assistant_answer=msg,
+                    assistant_answer=ndjson_str,
                     analysis=analysis,
                     query_type="out_of_scope",
                 )
-                return msg
+                return
 
             # ── Terminal-state gate: stop the follow-up loop ──────────────
             # The session carries a turn counter (working_memory). Once the user
@@ -410,39 +416,59 @@ class GraphRAGPipeline:
                 episodic_context_str.strip() + "\n\n" + combined_memory_context
             )
 
+        # Calculate terminal state flag
+        prior_user_turns = sum(
+            1 for t in working_memory.recent_turns if t.role == Role.USER
+        )
+        current_user_turn = prior_user_turns + 1
+        terminal = (
+            intent_str == ASSESSMENT_READY_INTENT
+            or current_user_turn > MAX_DIAGNOSTIC_TURNS
+            or not needs_followup_flag
+        )
+
         # Pass the rich memory context and history to the LLM. risk_level drives
         # the urgency layer of the system prompt (critical → structured emergency
         # response: safety → why → possible causes → next step → calm tone).
-        answer = self.llm.generate_response(
-            query_text      = original_query_text,
-            vector_context  = vector_context_str,
-            graph_context   = graph_context_str,
-            memory_context  = combined_memory_context,
-            conversation_history = memory_payload.conversation_context,
-            query_type      = intent_str,
-            goal            = config.goal,
-            risk_level      = answer_risk_level,
-            needs_followup  = needs_followup_flag,
-            memory_only     = memory_only,
-            has_findings    = has_findings,
-        )
+        answer_blocks = []
+        generated_any = False
+        try:
+            for block_dict in self.llm.generate_response(
+                query_text      = original_query_text,
+                vector_context  = vector_context_str,
+                graph_context   = graph_context_str,
+                memory_context  = combined_memory_context,
+                conversation_history = memory_payload.conversation_context,
+                query_type      = intent_str,
+                goal            = config.goal,
+                risk_level      = answer_risk_level,
+                needs_followup  = needs_followup_flag,
+                memory_only     = memory_only,
+                has_findings    = has_findings,
+                terminal        = terminal,
+            ):
+                yield block_dict
+                answer_blocks.append(block_dict)
+                generated_any = True
+        except Exception as e:
+            logger.exception("LLM generation failed")
 
         # Safety net: if generation failed during an emergency, never leave the
         # patient with nothing — fall back to the explicit emergency message.
-        if emergency and not answer:
-            answer = EMERGENCY_MESSAGE
-            print(f"\n{answer}\n")
+        if emergency and not generated_any:
+            from graphrag.domain.messages import emergency_blocks
+            blocks = emergency_blocks()
+            for b in blocks:
+                yield b
+                answer_blocks.append(b)
 
-        # Append follow-up questions at the end if any
-        if followup_questions and answer:
-            followup_block = "\n\n---\n💬 **To help me give you a more precise answer next time, could you also share:**\n" + "\n".join([f"- {q}" for q in followup_questions])
-            print(followup_block)
-            answer += followup_block
+        # Accumulate assistant answer as NDJSON string for memory representation
+        ndjson_str = "\n".join(json.dumps(b) for b in answer_blocks)
 
         self.memory_adapter.update_after_interaction(
             session=session,
             user_query=original_query_text,
-            assistant_answer=answer or "",
+            assistant_answer=ndjson_str,
             analysis=analysis,
             query_type=("emergency" if emergency else query_type.value),
         )
@@ -451,8 +477,6 @@ class GraphRAGPipeline:
         # written ONCE when the conversation closes — call `end_session(...)`
         # (exposed as POST /session/end). This keeps long-term memory to one
         # coherent episode per consultation instead of fragmented per-message ones.
-
-        return answer
 
     # ------------------------------------------------------------------
     # Episodic memory helpers (sync wrappers around the async services)

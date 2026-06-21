@@ -70,20 +70,12 @@ only with the caveat to confirm with a clinician or pharmacist."""
 
 RISK_LAYERS = {
     "critical": """URGENCY (CRITICAL) — EMERGENCY RESPONSE STRUCTURE
-These features may signal a serious, time-sensitive problem. Respond CALMLY and in this
-exact order — never a bare alarm:
-1. SAFETY FIRST — open with a clear recommendation to seek emergency care now (call local \
-emergency services / go to the nearest emergency department).
-2. WHY — one or two plain sentences on why these symptoms are concerning (informative, \
-not frightening).
-3. POSSIBLE SERIOUS CAUSES (NON-DIAGNOSTIC) — briefly note the kinds of conditions these \
-symptoms CAN sometimes indicate, phrased tentatively ("can sometimes be a sign of …"). \
-Do NOT diagnose, rank, or over-list — a few examples at most.
-4. NEXT STEP — what to do right now, and what to tell or bring to the clinician / what to \
-monitor on the way.
-5. TONE — calm and steadying throughout: reassuring without false reassurance, never \
-panic-inducing.
-Keep it concise — this is guidance to act on, not a lecture.""",
+These features may signal a serious, time-sensitive problem. Respond CALMLY by emitting blocks in this exact structure and order:
+1. `warning` block (severity: "critical") recommending to seek emergency care now.
+2. `summary` block explaining why these symptoms are concerning in plain language.
+3. `condition_list` block listing tentative causes/conditions that these symptoms can sometimes indicate (tentative, non-diagnostic, do not rank).
+4. `next_steps` block describing what to do right now, what to monitor, and what to tell the clinician.
+Keep the tone calm and steadying throughout: reassuring without false reassurance, never panic-inducing.""",
     "high": """URGENCY (HIGH)
 - Treat this as potentially serious. Near the TOP, recommend prompt medical evaluation \
 (same-day / urgent care), briefly say why, name the red flags that mean "go now", and \
@@ -104,28 +96,41 @@ and update your assessment and advice accordingly."""
 # ── Layer 5: per-intent guidance (keyed by gatekeeper intent string) ──────────
 INTENT_LAYERS = {
     "symptom_query": """TASK — SYMPTOM ASSESSMENT
-- Give the most likely explanation(s) for the patient's specific features, note what \
-points toward vs away from each, and state the red flags that would change the plan.""",
+- Emit a `summary` block explaining the situation.
+- Emit a `condition_list` block listing the differential conditions (including likelihood and a one-line rationale in the description field for each).
+- Emit a `warning` block if there are any red flags.
+- If needs_followup is true and it is NOT a terminal turn, emit a `follow_up_questions` block.
+- Emit a `next_steps` block containing concrete recommendations.""",
+
     "diagnosis_query": """TASK — EXPLAIN A CONDITION
-- Give a clear definition, the key mechanism in brief, typical features, and how it is \
-usually confirmed. Tailor to the patient's stated context.""",
+- Emit a `summary` block defining the condition.
+- Emit a `key_points` block summarizing the typical features and mechanism.
+- Emit a `next_steps` block listing recommendations.""",
+
     "medication_query": """TASK — MEDICATION / INTERACTION
-- Address the specific drugs named. Cover the relevant interaction/effect, its \
-mechanism in brief, severity, and the practical implication. Be explicit about what \
-requires a pharmacist/clinician check.""",
+- Emit a `summary` block describing the medication or interaction.
+- Emit a `key_points` block listing the relevant effects, severity, and practical implications.
+- Emit a `warning` block for any drug interactions or safety checks.
+- Emit a `next_steps` block.""",
+
     "treatment_query": """TASK — MANAGEMENT / GUIDELINE
-- Present the management approach as clear, ordered steps (first-line → escalation). \
-Distinguish self-care from steps that require a clinician.""",
+- Emit a `summary` block explaining the treatment.
+- Emit a `next_steps` block listing the management steps in chronological order.
+- Emit a `warning` block indicating self-care limits or safety warnings.""",
+
     "followup_query": """TASK — CONVERSATIONAL FOLLOW-UP
-- This continues the prior discussion. Answer directly using the conversation context; \
-do not restart history-taking or repeat earlier explanations verbatim.""",
+- This continues the prior discussion. Emit a `summary` block answering the question directly using conversation history.
+- Emit other relevant blocks (e.g. `next_steps`, `key_points`) as needed based on the query.""",
+
     "assessment_ready": """TASK — FINAL ASSESSMENT (TERMINAL)
-- Enough information has been gathered. Synthesize the collected symptoms, history, and \
-context into your assessment: the most likely explanation(s) with brief reasoning, plus \
-concrete recommendations and next steps. Do NOT ask any further questions — conclude.""",
+- Synthesize the collected symptoms, history, and context.
+- Emit a `summary` block with the final assessment.
+- Emit a `condition_list` block showing the final differential conditions.
+- Emit a `next_steps` block.
+- Do NOT emit a `follow_up_questions` block.""",
+
     "greeting": """TASK — GREETING
-- Greet warmly and briefly, and invite the patient to describe their health concern. \
-Do not lecture or list capabilities at length.""",
+- Emit exactly one `summary` block containing a warm and brief one-line greeting inviting the patient to describe their health concern."""
 }
 
 DEFAULT_INTENT_LAYER = """TASK — GENERAL MEDICAL ANSWER
@@ -133,10 +138,28 @@ DEFAULT_INTENT_LAYER = """TASK — GENERAL MEDICAL ANSWER
 
 # ── Layer 6: style / UX ───────────────────────────────────────────────────────
 STYLE = """STYLE
-- Be concise, calm, and actionable. Short paragraphs or tight bullet lists. Bold only \
-the few things that matter most. Reassure honestly where warranted, but never at the \
-expense of safety. Avoid walls of text, jargon, and disclaimers beyond the single \
-safety reminder."""
+- Be concise, calm, and use plain language. Reassure honestly where warranted, but never at the expense of safety. Avoid jargon and disclaimers beyond the single safety reminder."""
+
+OUTPUT_CONTRACT = """OUTPUT CONTRACT
+You must emit your output strictly as Newline-Delimited JSON (NDJSON).
+- Emit exactly one JSON block object per line, in render order.
+- Do NOT wrap the stream in a JSON array or a parent JSON object.
+- Do NOT use commas between lines.
+- Do NOT output any blank lines.
+- Do NOT output any markdown formatting, backticks (e.g. ```json), or wrapping prose. Only output the raw JSON lines.
+
+Example stream:
+{"type":"summary","data":{"text":"Night-time cough may have several causes."}}
+{"type":"follow_up_questions","data":{"questions":["Do you experience wheezing?","Do you have heartburn?"]}}
+
+Available block types and schemas:
+1. {"type":"summary","data":{"text": str}}
+2. {"type":"key_points","data":{"points": [str]}}
+3. {"type":"bullet_list","data":{"title": str|null, "items": [str]}}
+4. {"type":"follow_up_questions","data":{"questions": [str]}}
+5. {"type":"warning","data":{"text": str, "severity": "info"|"caution"|"critical"}}
+6. {"type":"next_steps","data":{"steps": [str]}}
+7. {"type":"condition_list","data":{"conditions": [{"name": str, "likelihood": str|null, "description": str|null}]}}"""
 
 
 def _name_layer(has_name: bool) -> str:
@@ -151,6 +174,7 @@ def compose_system_prompt(
     query_type: str = "unknown",
     risk_level: str = "none",
     has_name: bool = False,
+    terminal: bool = False,
 ) -> str:
     """
     Assemble the answer-stage system prompt from layered blocks.
@@ -162,6 +186,7 @@ def compose_system_prompt(
     risk_level : "none" | "low" | "medium" | "high" | "critical". Adds an
                  urgency block for medium and above.
     has_name   : whether the structured memory already holds the patient's name.
+    terminal   : whether this is a terminal turn (concludes diagnostic loop).
 
     Returns a single system-instruction string.
     """
@@ -191,5 +216,10 @@ def compose_system_prompt(
     layers.append(QUESTIONING_POLICY)
     layers.append(SAFEGUARDS)
     layers.append(STYLE)
+
+    if terminal:
+        layers.append("CRITICAL CONSTRAINT: Do NOT emit a `follow_up_questions` block under any circumstances. The session is terminal/concluding.")
+
+    layers.append(OUTPUT_CONTRACT)
 
     return "\n\n".join(layers)

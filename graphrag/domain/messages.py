@@ -27,3 +27,25 @@ EMERGENCY_MESSAGE: str = (
     "Please call emergency services (112 / 911) immediately or go to the "
     "nearest hospital."
 )
+
+
+def refusal_blocks() -> list[dict]:
+    return [
+        {"type": "summary", "data": {"text": REFUSAL_MESSAGE}}
+    ]
+
+
+def out_of_scope_blocks() -> list[dict]:
+    return [
+        {"type": "summary", "data": {"text": OUT_OF_SCOPE_MESSAGE}}
+    ]
+
+
+def emergency_blocks() -> list[dict]:
+    return [
+        {"type": "warning", "data": {"text": "seek emergency care now", "severity": "critical"}},
+        {"type": "next_steps", "data": {"steps": [
+            "Call emergency services (112 / 911) immediately.",
+            "Go to the nearest hospital emergency department."
+        ]}}
+    ]

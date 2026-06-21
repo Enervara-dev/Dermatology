@@ -55,6 +55,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from graphrag.config.settings import ConfigError, settings
+import logging
+
+logger = logging.getLogger("api")
 
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -132,24 +135,31 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(require_api_key)])
-def chat(req: ChatRequest, request: Request) -> ChatResponse:
+from fastapi.responses import StreamingResponse
+import json
+
+@app.post("/chat", dependencies=[Depends(require_api_key)])
+def chat(req: ChatRequest, request: Request) -> StreamingResponse:
     pipeline = request.app.state.pipeline
     lock = request.app.state.lock
-    # Sync endpoint → runs in a threadpool (off the event loop), so the memory
-    # layer's asyncio.run() works. Serialized: the shared pipeline isn't
-    # thread-safe (scale with multiple worker processes instead).
-    with lock:
-        try:
-            answer = pipeline.run(
-                query_text=req.message,
-                session_id=req.session_id,
-                user_id=req.user_id,
-            )
-        except Exception as exc:  # never leak a stack trace to the caller
-            raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
 
-    return ChatResponse(answer=answer or "", session_id=req.session_id)
+    def event_generator():
+        # Keep the existing pipeline lock serialized for the stream's duration.
+        with lock:
+            try:
+                for block in pipeline.run(
+                    query_text=req.message,
+                    session_id=req.session_id,
+                    user_id=req.user_id,
+                ):
+                    yield json.dumps(block) + "\n"
+            except Exception as exc:
+                # Log the error; if the stream has already started, we can't change HTTP headers
+                # but raising will abort the connection.
+                logger.error(f"Pipeline error during streaming: {exc}")
+                raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 @app.post("/session/end", dependencies=[Depends(require_api_key)])

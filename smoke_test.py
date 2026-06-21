@@ -1,5 +1,5 @@
 """
-Offline end-to-end smoke test for the GraphRAG pulmonology assistant.
+Offline end-to-end smoke test for the GraphRAG dermatology assistant.
 
 Runs WITHOUT network or paid calls: Pinecone, Neo4j, and Gemini are stubbed.
 It exercises every subsystem and asserts behavior:
@@ -12,9 +12,7 @@ It exercises every subsystem and asserts behavior:
                                NO_RETRIEVAL conclude, greeting)
   - Stage-4 prompt injection  (real gemini_llm, generate_stream patched)
   - HTTP API wiring           (best-effort: routes registered)
-
-A LIVE run (real Pinecone/Neo4j/Gemini) still has to be done on a networked
-machine — this validates the wiring and decision logic, not the data stores.
+  - NDJSON block streaming    (validator, parser, builders)
 
 Usage:
     python smoke_test.py          # exits 0 if all pass, 1 otherwise
@@ -23,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import sys
@@ -40,8 +39,6 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 logging.basicConfig(level=logging.ERROR)
-# Silence the pipeline's own loggers (their handlers bind to the real stdout and
-# bypass redirect_stdout) so the smoke-test report stays readable.
 logging.disable(logging.CRITICAL)
 
 
@@ -81,8 +78,8 @@ def silent():
 
 
 # ── stub pipeline builder ─────────────────────────────────────────────────────
-def build_stub_pipeline(analyses, *, graph=("asthma -[manifests_as]-> wheeze",),
-                        chunk_entities=("asthma", "wheeze"), llm_answer="ANSWER: clinical guidance"):
+def build_stub_pipeline(analyses, *, graph=("psoriasis -[manifests_as]-> plaque",),
+                        chunk_entities=("psoriasis", "plaque"), llm_answer="ANSWER: clinical guidance"):
     """
     A GraphRAGPipeline with external services stubbed but real in-process
     components (entity_processor, memory_adapter → RAM). `analyses` is a list of
@@ -109,7 +106,7 @@ def build_stub_pipeline(analyses, *, graph=("asthma -[manifests_as]-> wheeze",),
         def retrieve(self, *a, **k):
             flags["retrieved"] = True
             return [{"id": "c1", "metadata": {
-                "summary": "Asthma is an airway disease that causes wheeze.",
+                "summary": "Psoriasis is a chronic skin disease causing plaques.",
                 "entities": list(chunk_entities)}}]
 
     class N:
@@ -119,7 +116,7 @@ def build_stub_pipeline(analyses, *, graph=("asthma -[manifests_as]-> wheeze",),
     class L:
         def generate_response(self, **k):
             calls.append(k)
-            return llm_answer
+            yield {"type": "summary", "data": {"text": llm_answer}}
 
     p.query_analyzer = A()
     p.pinecone_retriever = PC()
@@ -129,7 +126,7 @@ def build_stub_pipeline(analyses, *, graph=("asthma -[manifests_as]-> wheeze",),
 
 
 def analysis(intent="symptom_query", *, needs_followup=False, relevance=95,
-             risk="low", action="retrieve", symptoms=("cough",)):
+              risk="low", action="retrieve", symptoms=("rash",)):
     return {
         "domain": "health", "intent": intent, "risk_level": risk,
         "pulmonology_relevance": relevance,
@@ -156,6 +153,8 @@ def test_imports():
         "Memory_Layer.session_memory.domain",
         "episodic.api.dependencies",
         "episodic.schemas.retrieval",
+        "graphrag.schemas.blocks",
+        "graphrag.validators.answer_validator",
     ]
     for m in mods:
         try:
@@ -181,16 +180,16 @@ def test_domain():
     R.check("max diagnostic turns = 2", MAX_DIAGNOSTIC_TURNS == 2)
     R.check("gatekeeper prompt has relevance rubric + red flags + terminal state",
             all(s in GATEKEEPER_SYSTEM_PROMPT for s in
-                ("pulmonology_relevance", "RESPIRATORY / CARDIOPULMONARY RED FLAGS", "assessment_ready")))
+                ("pulmonology_relevance", "DERMATOLOGICAL RED FLAGS", "assessment_ready")))
     crit = compose_system_prompt(query_type="symptom_query", risk_level="critical", has_name=False)
     R.check("critical answer prompt = structured emergency",
-            "EMERGENCY RESPONSE STRUCTURE" in crit and "POSSIBLE SERIOUS CAUSES" in crit)
+            "EMERGENCY RESPONSE STRUCTURE" in crit and "TENTATIVE CAUSES" in crit.upper())
     pulm = compose_system_prompt(query_type="symptom_query", risk_level="none", has_name=False)
-    R.check("answer prompt is pulmonology-tuned", "pulmonology" in pulm.lower())
+    R.check("answer prompt is dermatology-tuned", "dermatology" in pulm.lower())
     # red flag detection
-    R.check("red flag: coughing up blood", detect_red_flags("I am coughing up blood") == ["haemoptysis"])
-    R.check("red flag: NOT tripped by mild 'cant breathe properly'",
-            detect_red_flags("i cant breath properly, sinus") == [])
+    R.check("red flag: swelling of face", detect_red_flags("swelling of my face and I cannot breathe") == ["anaphylaxis_angioedema"])
+    R.check("red flag: NOT tripped by mild itching",
+            detect_red_flags("just mild itching on my arm") == [])
     # closure directive matrix
     R.check("closure: greeting (no findings) → none",
             closure_directive(intent="greeting", needs_followup=False, memory_only=True, has_findings=False) is None)
@@ -208,21 +207,21 @@ def test_memory():
     from Memory_Layer.session_memory import SessionMemory, Message, Role, extract_state, get_working_memory
     from Memory_Layer.session_memory.state_extractor import extract_entities
 
-    raw = extract_entities("chest pain and wheezing, worse in the morning, coughing up blood")
-    R.check("respiratory symptom extraction", {"chest_pain", "wheezing", "haemoptysis"} <= set(raw.symptoms), str(raw.symptoms))
-    R.check("trigger extraction", "morning" in raw.triggers, str(raw.triggers))
+    raw = extract_entities("itchy rash, worse in sunlight, bleeding mole")
+    R.check("dermatological symptom extraction", {"itching", "rash", "bleeding_lesion"} <= set(raw.symptoms), str(raw.symptoms))
+    R.check("trigger extraction", "sunlight" in raw.triggers, str(raw.triggers))
 
     # symptom-weighted risk in the live path
     s = SessionMemory(session_id="m1")
-    s.state = extract_state(s, Message(role=Role.USER, content="I have chest pain", risk_level="low"))
+    s.state = extract_state(s, Message(role=Role.USER, content="I have peeling skin", risk_level="low"))
     R.check("critical symptom escalates risk → critical", str(s.state.risk_level) in ("critical", "RiskLevel.CRITICAL"), str(s.state.risk_level))
 
     # continuity across turns
     s2 = SessionMemory(session_id="m2")
-    s2.state = extract_state(s2, Message(role=Role.USER, content="cough for 3 days"))
-    s2.add_turn(Message(role=Role.USER, content="cough for 3 days"))
-    s2.state = extract_state(s2, Message(role=Role.USER, content="now also wheezing"))
-    R.check("symptoms accumulate across turns", {"cough", "wheezing"} <= set(s2.state.symptoms), str(s2.state.symptoms))
+    s2.state = extract_state(s2, Message(role=Role.USER, content="dry skin for 3 days"))
+    s2.add_turn(Message(role=Role.USER, content="dry skin for 3 days"))
+    s2.state = extract_state(s2, Message(role=Role.USER, content="now also itching"))
+    R.check("symptoms accumulate across turns", {"dry_skin", "itching"} <= set(s2.state.symptoms), str(s2.state.symptoms))
 
 
 # ── 4. entity processor ───────────────────────────────────────────────────────
@@ -231,16 +230,16 @@ def test_entities():
     from graphrag.processors.entity_processor import EntityProcessor
     from graphrag.pipeline.graphrag_pipeline import _merge_graph_entities, _entities_from_analysis
 
-    # plain-name metadata (real Pinecone format) — the bug we fixed
+    # plain-name metadata (real Pinecone format)
     _, ents, _ = EntityProcessor.process_matches(
-        [{"id": "1", "metadata": {"summary": "s", "entities": ["asthma", "wheeze", "asthma"]}}],
+        [{"id": "1", "metadata": {"summary": "s", "entities": ["psoriasis", "plaque", "psoriasis"]}}],
         priority_entity_types=["disease"], query="")
-    R.check("plain-name entities extracted + deduped", ents == ["asthma", "wheeze"], str(ents))
+    R.check("plain-name entities extracted + deduped", ents == ["psoriasis", "plaque"], str(ents))
 
-    merged = _merge_graph_entities(["asthma"], _entities_from_analysis(
-        {"medical_entities": {"symptoms": ["chest_pain"], "drugs": [], "conditions": ["copd"]}}), ["wheeze"])
+    merged = _merge_graph_entities(["psoriasis"], _entities_from_analysis(
+        {"medical_entities": {"symptoms": ["itching"], "drugs": [], "conditions": ["eczema"]}}), ["dry_skin"])
     R.check("hybrid graph entities (chunk+query+memory, normalized)",
-            merged[0] == "asthma" and "chest pain" in merged, str(merged))
+            merged[0] == "psoriasis" and "itching" in merged, str(merged))
 
 
 # ── 5. full pipeline scenarios ────────────────────────────────────────────────
@@ -251,7 +250,8 @@ def test_pipeline_scenarios():
     # a) in-scope → retrieval + graph + answer, graph entities are hybrid
     p, calls, flags = build_stub_pipeline([analysis("symptom_query", needs_followup=True)])
     with silent():
-        ans = p.run("breathless and wheezing", session_id="sc_in")
+        ans_blocks = list(p.run("itchy skin rash on my arm", session_id="sc_in"))
+    ans = ans_blocks[0]["data"]["text"] if ans_blocks else ""
     gctx = calls[-1]["graph_context"]
     R.check("in-scope answered + retrieval ran", ans.startswith("ANSWER:") and flags["retrieved"])
     R.check("graph traversal produced relations", "manifests_as" in gctx, gctx[:60])
@@ -259,14 +259,16 @@ def test_pipeline_scenarios():
     # b) out-of-scope → restricted, retrieval skipped
     p, calls, flags = build_stub_pipeline([analysis("symptom_query", relevance=20, needs_followup=False)])
     with silent():
-        ans = p.run("itchy skin rash on my arm", session_id="sc_oos")
+        ans_blocks = list(p.run("cough and chest pain", session_id="sc_oos"))
+    ans = ans_blocks[0]["data"]["text"] if ans_blocks else ""
     R.check("out-of-scope restricted", ans == OUT_OF_SCOPE_MESSAGE)
     R.check("out-of-scope skipped retrieval", flags["retrieved"] is False and not calls)
 
     # c) emergency (red flag) → reasoned answer at critical risk, retrieval ran
     p, calls, flags = build_stub_pipeline([analysis("symptom_query", needs_followup=False)])
     with silent():
-        ans = p.run("I am coughing up blood and struggling to breathe", session_id="sc_er")
+        ans_blocks = list(p.run("swelling of my face and I cannot swallow", session_id="sc_er"))
+    ans = ans_blocks[0]["data"]["text"] if ans_blocks else ""
     R.check("emergency → reasoned LLM answer (not static)", ans.startswith("ANSWER:"))
     R.check("emergency → critical risk + retrieval ran",
             calls and calls[-1]["risk_level"] == "critical" and flags["retrieved"], str(calls[-1]["risk_level"]) if calls else "no-call")
@@ -275,7 +277,7 @@ def test_pipeline_scenarios():
     p, calls, _ = build_stub_pipeline([analysis("symptom_query", needs_followup=True)] * 3)
     with silent():
         for _ in range(3):
-            p.run("I have a cough", session_id="sc_turns")
+            list(p.run("I have a rash", session_id="sc_turns"))
     R.check("turn 1 not terminal", calls[0]["query_type"] == "symptom_query")
     R.check("turn 3 forced → assessment_ready", calls[2]["query_type"] == "assessment_ready" and calls[2]["needs_followup"] is False)
 
@@ -283,23 +285,24 @@ def test_pipeline_scenarios():
     p, calls, _ = build_stub_pipeline([analysis("symptom_query", needs_followup=True),
                                        analysis("symptom_query", needs_followup=False)])
     with silent():
-        p.run("I have a cough", session_id="sc_nf")
-        p.run("still coughing", session_id="sc_nf")
+        list(p.run("I have a rash", session_id="sc_nf"))
+        list(p.run("still itchy", session_id="sc_nf"))
     R.check("needs_followup False → assessment_ready", calls[1]["query_type"] == "assessment_ready")
 
     # f) NO_RETRIEVAL medical follow-up → memory_only + findings (conclude)
     p, calls, _ = build_stub_pipeline([analysis("symptom_query", needs_followup=True),
                                        analysis("followup_query", needs_followup=True, action="route_to_followup")])
     with silent():
-        p.run("I have a cough", session_id="sc_nr")
-        p.run("is it serious?", session_id="sc_nr")
+        list(p.run("I have a rash", session_id="sc_nr"))
+        list(p.run("is it serious?", session_id="sc_nr"))
     R.check("NO_RETRIEVAL follow-up → memory_only + has_findings",
             calls[1]["memory_only"] is True and calls[1]["has_findings"] is True, str({k: calls[1][k] for k in ("memory_only", "has_findings")}))
 
     # g) greeting → exempt from scope gate, answered
     p, calls, _ = build_stub_pipeline([analysis("greeting", relevance=5, needs_followup=False)])
     with silent():
-        ans = p.run("hello", session_id="sc_hi")
+        ans_blocks = list(p.run("hello", session_id="sc_hi"))
+    ans = ans_blocks[0]["data"]["text"] if ans_blocks else ""
     R.check("greeting exempt → answered", ans.startswith("ANSWER:"))
 
 
@@ -317,7 +320,7 @@ def test_stage4_injection():
 
     def fake_stream(*, user_prompt, model, system_instruction=None, temperature=None):
         cap["sys"] = system_instruction
-        yield "ok"
+        yield '{"type":"summary","data":{"text":"ok"}}'
 
     gl.generate_stream = fake_stream
     try:
@@ -328,8 +331,8 @@ def test_stage4_injection():
 
     def call(**kw):
         with silent():
-            llm.generate_response(query_text="q", vector_context="", graph_context="",
-                                  memory_context="", conversation_history="", **kw)
+            list(llm.generate_response(query_text="q", vector_context="", graph_context="",
+                                  memory_context="", conversation_history="", **kw))
         return cap.get("sys", "")
 
     s = call(query_type="assessment_ready", needs_followup=False, memory_only=False, has_findings=True)
@@ -391,17 +394,19 @@ def test_episodic_session_end():
     class A:
         def analyze(self, q): return analysis("symptom_query", needs_followup=False)
     class PC:
-        def retrieve(self, *a, **k): return [{"id": "c", "metadata": {"summary": "s", "entities": ["asthma"]}}]
+        def retrieve(self, *a, **k): return [{"id": "c", "metadata": {"summary": "s", "entities": ["dry_skin"]}}]
     class N:
         def retrieve_relations(self, *a, **k): return []
         def close(self): pass
     class L:
-        def generate_response(self, **k): return "ANSWER: ok"
+        def generate_response(self, **k):
+            yield {"type": "summary", "data": {"text": "ANSWER: ok"}}
+
     p.query_analyzer = A(); p.pinecone_retriever = PC(); p.neo4j_retriever = N(); p.llm = L()
 
     # A chat turn WITH a user_id must NOT write episodic memory (no per-turn ingest).
     with silent():
-        p.run("I have a cough and chest pain", session_id="ep_s", user_id="u1")
+        list(p.run("I have dry skin and itching", session_id="ep_s", user_id="u1"))
     R.check("no per-turn episodic write during /chat", captured == [])
 
     # Closing the session writes exactly ONE consolidated episode.
@@ -409,7 +414,7 @@ def test_episodic_session_end():
         status = p.end_session(user_id="u1", session_id="ep_s")
     R.check("end_session stores one episode", status.get("stored") is True and len(captured) == 1, str(status))
     digest = captured[0] if captured else ""
-    R.check("digest consolidates the session", "cough" in digest and "chest_pain" in digest, digest[:80])
+    R.check("digest consolidates the session", "dry_skin" in digest and "itching" in digest, digest[:80])
 
     # No user_id → nothing stored.
     with silent():
@@ -435,9 +440,53 @@ def test_api_wiring():
         R.check("app.main imports", False, repr(e))
 
 
+# ── 9. Stream and Blocks validation (NEW) ──────────────────────────────────────
+def test_blocks_and_streaming():
+    R.section("9. NDJSON Blocks and Streaming")
+    from graphrag.validators.answer_validator import validate_line, iter_blocks
+    from graphrag.schemas.blocks import Block, SummaryBlock, WarningBlock, NextStepsBlock, FollowUpQuestionsBlock
+    
+    # 1. Streamed lines each validate as a Block
+    line1 = '{"type":"summary","data":{"text":"Dry skin is very common."}}'
+    b1 = validate_line(line1)
+    R.check("line1 validates as summary block", b1 is not None and b1.type == "summary" and b1.data.text == "Dry skin is very common.")
+    
+    # 2. A malformed line is dropped; valid lines before/after still stream.
+    lines = [
+        '{"type":"summary","data":{"text":"Hello."}}\n',
+        '{"malformed_json": }\n',
+        '{"type":"warning","data":{"text":"Warning!","severity":"caution"}}\n'
+    ]
+    blocks = list(iter_blocks(lines, terminal=False))
+    R.check("iter_blocks yields only valid blocks and drops malformed line", len(blocks) == 2 and blocks[0].type == "summary" and blocks[1].type == "warning")
+    
+    # 3. terminal=True drops follow_up_questions
+    lines_with_followup = [
+        '{"type":"summary","data":{"text":"Assessment complete."}}\n',
+        '{"type":"follow_up_questions","data":{"questions":["Any questions?"]}}\n'
+    ]
+    blocks_terminal = list(iter_blocks(lines_with_followup, terminal=True))
+    R.check("terminal=True drops follow_up_questions", len(blocks_terminal) == 1 and blocks_terminal[0].type == "summary")
+    
+    # 4. refuse / out-of-scope / emergency stream blocks, not strings
+    from graphrag.domain.messages import refusal_blocks, out_of_scope_blocks, emergency_blocks
+    R.check("refusal_blocks returns list of blocks", isinstance(refusal_blocks(), list) and refusal_blocks()[0]["type"] == "summary")
+    R.check("out_of_scope_blocks returns list of blocks", isinstance(out_of_scope_blocks(), list) and out_of_scope_blocks()[0]["type"] == "summary")
+    eb = emergency_blocks()
+    R.check("emergency_blocks returns warning + next_steps", len(eb) == 2 and eb[0]["type"] == "warning" and eb[0]["data"]["severity"] == "critical" and eb[1]["type"] == "next_steps")
+    
+    # 5. First block reaches the client before the model finishes (no full-response buffering)
+    generator_input = []
+    def input_generator():
+        yield '{"type":"summary","data":{"text":"First."}}\n'
+    gen = iter_blocks(input_generator(), terminal=False)
+    first_block = next(gen)
+    R.check("first block yielded before stream ends (no full buffering)", first_block.type == "summary" and first_block.data.text == "First.")
+
+
 def main() -> None:
     print("=" * 64)
-    print("  OFFLINE SMOKE TEST — GraphRAG pulmonology assistant")
+    print("  OFFLINE SMOKE TEST — GraphRAG dermatology assistant")
     print("  (Pinecone / Neo4j / Gemini stubbed — no network, no cost)")
     print("=" * 64)
     test_imports()
@@ -448,6 +497,7 @@ def main() -> None:
     test_stage4_injection()
     test_episodic_session_end()
     test_api_wiring()
+    test_blocks_and_streaming()
     print("\n" + "=" * 64)
     total = R.passed + R.failed
     print(f"  RESULT: {R.passed}/{total} checks passed, {R.failed} failed")

@@ -137,10 +137,12 @@ def check_episodic() -> None:
 def run_query(query: str) -> None:
     print("\n=== Live pipeline query (calls Gemini — paid) ===")
     from graphrag.pipeline.graphrag_pipeline import GraphRAGPipeline
+    import json
     pipe = GraphRAGPipeline()
     try:
-        answer = pipe.run(query_text=query, session_id="live-check")
-        ok("pipeline returned an answer", bool(answer), f"{len(answer or '')} chars")
+        blocks = list(pipe.run(query_text=query, session_id="live-check"))
+        answer_str = "\n".join(json.dumps(b) for b in blocks)
+        ok("pipeline returned an answer", bool(blocks), f"{len(answer_str)} chars")
     finally:
         pipe.close()
 
